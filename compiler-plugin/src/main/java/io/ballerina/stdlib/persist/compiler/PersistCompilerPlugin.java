@@ -33,6 +33,7 @@ import io.ballerina.stdlib.persist.compiler.codeaction.ChangeTypeToString;
 import io.ballerina.stdlib.persist.compiler.codeaction.RemoveDiagnosticLocation;
 import io.ballerina.stdlib.persist.compiler.codeaction.RemoveTextRange;
 import io.ballerina.stdlib.persist.compiler.codeaction.SwitchRelationOwner;
+import io.ballerina.stdlib.persist.compiler.codemodifier.PersistCodeModifier;
 
 import java.util.List;
 
@@ -43,6 +44,7 @@ public class PersistCompilerPlugin extends CompilerPlugin {
 
     @Override
     public void init(CompilerPluginContext compilerPluginContext) {
+        compilerPluginContext.addCodeModifier(new PersistCodeModifier());
         compilerPluginContext.addCodeAnalyzer(new PersistCodeAnalyzer());
         getCodeActions().forEach(compilerPluginContext::addCodeAction);
     }

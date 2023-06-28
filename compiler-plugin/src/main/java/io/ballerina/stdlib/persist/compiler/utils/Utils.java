@@ -18,7 +18,10 @@
 
 package io.ballerina.stdlib.persist.compiler.utils;
 
+import io.ballerina.compiler.syntax.tree.LiteralValueToken;
 import io.ballerina.compiler.syntax.tree.Node;
+import io.ballerina.compiler.syntax.tree.NodeFactory;
+import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
 import io.ballerina.projects.plugins.codeaction.CodeActionArgument;
 import io.ballerina.projects.plugins.codeaction.CodeActionContext;
@@ -47,6 +50,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+
+import static io.ballerina.compiler.syntax.tree.AbstractNodeFactory.createEmptyMinutiaeList;
 
 /**
  * Class containing util functions.
@@ -239,5 +244,10 @@ public final class Utils {
         } catch (IOException e) {
             throw new BalException("error while reading persist configurations. " + e.getMessage());
         }
+    }
+
+    public static LiteralValueToken getStringLiteralToken(String value) {
+        return NodeFactory.createLiteralValueToken(
+                SyntaxKind.STRING_LITERAL, value, createEmptyMinutiaeList(), createEmptyMinutiaeList());
     }
 }
