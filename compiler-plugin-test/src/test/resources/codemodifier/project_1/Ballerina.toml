@@ -9,7 +9,7 @@ observabilityIncluded = false
 
 [persist]
 datastore = "mysql"
-module = "medical_center.entities"
+module = "medical_center"
 
 [[platform.java11.dependency]]
 groupId = "io.ballerina.stdlib"

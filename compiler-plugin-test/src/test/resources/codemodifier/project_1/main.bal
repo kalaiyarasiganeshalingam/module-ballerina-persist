@@ -29,6 +29,16 @@ public function main() returns error? {
     entities:Product[] products = check from var e in mcClient->/products(targetType = entities:Product)
         where e.id == value || e.id == "s"
         select e;
+
+    entities:Product[]|error result = from var e in mcClient->/products(targetType = entities:Product)
+            where e.id == value && e.id == "test"
+            select e;
+
+    products = check from var e in mcClient->/products(targetType = entities:Product)
+            where (e.id == value || e.id == "s") && e.id != "test"
+            select e;
+
     io:println(products);
+    io:println(result);
     check mcClient.close();
 }

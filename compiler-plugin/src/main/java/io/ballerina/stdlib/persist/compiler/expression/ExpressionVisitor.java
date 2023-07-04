@@ -12,8 +12,8 @@ import java.util.List;
 
 import static io.ballerina.compiler.syntax.tree.SyntaxKind.EQUAL_TOKEN;
 import static io.ballerina.stdlib.persist.compiler.Constants.BAL_ESCAPE_TOKEN;
-import static io.ballerina.stdlib.persist.compiler.Constants.CLOSE_BRACES;
-import static io.ballerina.stdlib.persist.compiler.Constants.OPEN_BRACES;
+import static io.ballerina.stdlib.persist.compiler.Constants.CLOSE_BRACES_WITH_SPACE;
+import static io.ballerina.stdlib.persist.compiler.Constants.OPEN_BRACES_WITH_SPACE;
 import static io.ballerina.stdlib.persist.compiler.Constants.SPACE;
 import static io.ballerina.stdlib.persist.compiler.Constants.SQLKeyWords.AND;
 import static io.ballerina.stdlib.persist.compiler.Constants.SQLKeyWords.NOT_EQUAL_TOKEN;
@@ -23,7 +23,7 @@ import static io.ballerina.stdlib.persist.compiler.Constants.TokenNodes.INTERPOL
 import static io.ballerina.stdlib.persist.compiler.Constants.TokenNodes.INTERPOLATION_START_TOKEN;
 
 /**
- *
+ * Visitor class for generating WHERE clause.
  */
 public class ExpressionVisitor {
 
@@ -139,11 +139,11 @@ public class ExpressionVisitor {
     }
 
     public void beginVisitBraces() {
-        this.expression.append(OPEN_BRACES);
+        this.expression.append(OPEN_BRACES_WITH_SPACE);
     }
 
     public void endVisitBraces() {
-        this.expression.append(CLOSE_BRACES);
+        this.expression.append(CLOSE_BRACES_WITH_SPACE);
     }
 
     /*Constant*/

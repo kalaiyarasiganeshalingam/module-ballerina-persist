@@ -37,12 +37,16 @@ public final class Constants {
     public static final String ARRAY = "[]";
     public static final String LS = System.lineSeparator();
     public static final String SPACE = " ";
-    public static final String OPEN_BRACES = "( ";
-    public static final String CLOSE_BRACES = ") ";
+    public static final String WHERE = "WHERE";
+    public static final String OPEN_BRACES_WITH_SPACE = "( ";
+    public static final String CLOSE_BRACES_WITH_SPACE = ") ";
+
+    public static final String OPEN_BRACES = "(";
+    public static final String CLOSE_BRACES = ")";
+    public static final String CLOSE_BRACES_WITH_NEW_LINE = ")\n";
     public static final String BAL_ESCAPE_TOKEN = "'";
     public static final String BACKTICK = "`";
     public static final String PERSIST_INHERITANCE_NODE = "*persist:AbstractPersistClient;";
-    public static final String EXECUTE_FUNCTION = "execute";
 
     private Constants() {
     }
@@ -116,7 +120,19 @@ public final class Constants {
                 SyntaxKind.INTERPOLATION_START_TOKEN, "${", createEmptyMinutiaeList(), createEmptyMinutiaeList());
         public static final Token INTERPOLATION_END_TOKEN = NodeFactory.createLiteralValueToken(
                 SyntaxKind.CLOSE_BRACE_TOKEN, "}", createEmptyMinutiaeList(), createEmptyMinutiaeList());
+        public static final Token WHERE_CLAUSE_NAME = NodeFactory.createLiteralValueToken(
+                SyntaxKind.NAMED_ARG, "whereClause", createEmptyMinutiaeList(), createEmptyMinutiaeList());
+        public static final Token EQUAL_TOKEN = NodeFactory.createLiteralValueToken(
+                SyntaxKind.EQUAL_TOKEN, " = string ", createEmptyMinutiaeList(), createEmptyMinutiaeList());
+        public static final Token COMMA_TOKEN = NodeFactory.createLiteralValueToken(
+                SyntaxKind.COMMA_TOKEN, ", ", createEmptyMinutiaeList(), createEmptyMinutiaeList());
         public static final LiteralValueToken BACKTICK_TOKEN = NodeFactory.createLiteralValueToken(
                 SyntaxKind.BACKTICK_TOKEN, BACKTICK, createEmptyMinutiaeList(), createEmptyMinutiaeList());
+        public static final Token OPEN_PAREN_TOKEN = NodeFactory.createLiteralValueToken(SyntaxKind.OPEN_PAREN_TOKEN,
+                OPEN_BRACES, createEmptyMinutiaeList(), createEmptyMinutiaeList());
+        public static final Token CLOSE_PAREN_WITH_NEW_LINE_TOKEN = NodeFactory.createLiteralValueToken(
+                SyntaxKind.CLOSE_PAREN_TOKEN, CLOSE_BRACES_WITH_NEW_LINE, createEmptyMinutiaeList(),
+                createEmptyMinutiaeList());
+
     }
 }

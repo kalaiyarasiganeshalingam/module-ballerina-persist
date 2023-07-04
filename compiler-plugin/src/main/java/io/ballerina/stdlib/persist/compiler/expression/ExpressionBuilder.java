@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- *
+ * Builder class to process where clause.
  */
 public class ExpressionBuilder {
     private final ExpressionNode expressionNode;

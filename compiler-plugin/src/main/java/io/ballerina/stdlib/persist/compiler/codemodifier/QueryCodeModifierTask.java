@@ -18,21 +18,21 @@
 
 package io.ballerina.stdlib.persist.compiler.codemodifier;
 
+import io.ballerina.compiler.syntax.tree.AbstractNodeFactory;
 import io.ballerina.compiler.syntax.tree.BindingPatternNode;
 import io.ballerina.compiler.syntax.tree.ChildNodeEntry;
 import io.ballerina.compiler.syntax.tree.ClientResourceAccessActionNode;
 import io.ballerina.compiler.syntax.tree.FromClauseNode;
-import io.ballerina.compiler.syntax.tree.FunctionArgumentNode;
 import io.ballerina.compiler.syntax.tree.IntermediateClauseNode;
+import io.ballerina.compiler.syntax.tree.LiteralValueToken;
 import io.ballerina.compiler.syntax.tree.ModulePartNode;
+import io.ballerina.compiler.syntax.tree.NamedArgumentNode;
 import io.ballerina.compiler.syntax.tree.Node;
 import io.ballerina.compiler.syntax.tree.NodeFactory;
 import io.ballerina.compiler.syntax.tree.NodeList;
 import io.ballerina.compiler.syntax.tree.ParenthesizedArgList;
 import io.ballerina.compiler.syntax.tree.PositionalArgumentNode;
 import io.ballerina.compiler.syntax.tree.QueryPipelineNode;
-import io.ballerina.compiler.syntax.tree.RemoteMethodCallActionNode;
-import io.ballerina.compiler.syntax.tree.SeparatedNodeList;
 import io.ballerina.compiler.syntax.tree.SimpleNameReferenceNode;
 import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
@@ -50,25 +50,48 @@ import io.ballerina.stdlib.persist.compiler.exception.NotSupportedExpressionExce
 import io.ballerina.stdlib.persist.compiler.expression.ExpressionBuilder;
 import io.ballerina.stdlib.persist.compiler.expression.ExpressionVisitor;
 import io.ballerina.stdlib.persist.compiler.utils.Utils;
+import org.ballerinalang.formatter.core.Formatter;
+import org.ballerinalang.formatter.core.FormatterException;
 
-import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
-import static io.ballerina.compiler.syntax.tree.AbstractNodeFactory.createSeparatedNodeList;
 
 /**
  *
  */
 public class QueryCodeModifierTask implements ModifierTask<SourceModifierContext> {
 
+    private final Map<String, String> variables;
+    private final List<String> entities;
+    private final List<String> persistClientNames;
+    private final List<String> persistClientVariables = new ArrayList<>();
+    private boolean isClientVariablesProcessed = false;
+
+    public QueryCodeModifierTask(List<String> persistClientNames, List<String> entities,
+                                 Map<String, String> variables) {
+        this.entities = entities;
+        this.variables = variables;
+        this.persistClientNames = persistClientNames;
+    }
+
     @Override
     public void modify(SourceModifierContext sourceModifierContext) {
-        Package pkg = sourceModifierContext.currentPackage();
+        if (persistClientNames.isEmpty()) {
+            return;
+        }
+        if (!isClientVariablesProcessed) {
+            processPersistClientVariables();
+        }
 
+        if (this.persistClientVariables.isEmpty()) {
+            return;
+        }
+
+        Package pkg = sourceModifierContext.currentPackage();
         for (ModuleId moduleId : pkg.moduleIds()) {
             Module module = pkg.module(moduleId);
             for (DocumentId documentId : module.documentIds()) {
@@ -83,20 +106,40 @@ public class QueryCodeModifierTask implements ModifierTask<SourceModifierContext
     }
 
     private SyntaxTree getUpdatedSyntaxTree(Module module, DocumentId documentId) {
-
         Document document = module.document(documentId);
         ModulePartNode rootNode = document.syntaxTree().rootNode();
-        QueryConstructModifier queryConstructModifier = new QueryConstructModifier();
+        QueryConstructModifier queryConstructModifier = new QueryConstructModifier(entities, persistClientVariables);
         ModulePartNode newRoot = (ModulePartNode) rootNode.apply(queryConstructModifier);
+        SyntaxTree syntaxTree = document.syntaxTree().modifyWith(newRoot);
+        try {
+            Formatter.format(syntaxTree);
+        } catch (FormatterException e) {
+            // throw new RuntimeException("Syntax tree formatting failed for the file: " + document.name());
+        }
+        return syntaxTree;
+    }
 
-        return document.syntaxTree().modifyWith(newRoot);
+    private void processPersistClientVariables() {
+        for (Map.Entry<String, String> entry : this.variables.entrySet()) {
+            String[] strings = entry.getValue().split(":");
+            if (persistClientNames.contains(strings[strings.length - 1])) {
+                persistClientVariables.add(entry.getKey());
+            }
+        }
+        isClientVariablesProcessed = true;
     }
 
     private static class QueryConstructModifier extends TreeModifier {
+        private final List<String> persistClientVariables;
+        private final List<String> entities;
+
+        public QueryConstructModifier(List<String> entities, List<String> persistClientVariables) {
+            this.entities = entities;
+            this.persistClientVariables = persistClientVariables;
+        }
 
         @Override
         public QueryPipelineNode transform(QueryPipelineNode queryPipelineNode) {
-
             FromClauseNode fromClauseNode = queryPipelineNode.fromClause();
             if (!isQueryUsingPersistentClient(fromClauseNode)) {
                 return queryPipelineNode;
@@ -124,65 +167,67 @@ public class QueryCodeModifierTask implements ModifierTask<SourceModifierContext
                 return queryPipelineNode;
             }
 
-
-            PositionalArgumentNode firstArgument = NodeFactory.createPositionalArgumentNode(
+            PositionalArgumentNode parameterizedQueryForWhere = NodeFactory.createPositionalArgumentNode(
                     NodeFactory.createTemplateExpressionNode(
-                            SyntaxKind.RAW_TEMPLATE_EXPRESSION, null, Constants.TokenNodes.BACKTICK_TOKEN,
-                            createSeparatedNodeList(parameterizedQuery), Constants.TokenNodes.BACKTICK_TOKEN
+                            SyntaxKind.RAW_TEMPLATE_EXPRESSION, null,
+                            Constants.TokenNodes.BACKTICK_TOKEN,
+                            AbstractNodeFactory.createSeparatedNodeList(parameterizedQuery),
+                            Constants.TokenNodes.BACKTICK_TOKEN
                     )
-            );
-            RemoteMethodCallActionNode remoteCall = (RemoteMethodCallActionNode) fromClauseNode.expression();
-            FromClauseNode modifiedFromClause = fromClauseNode.modify(
-                    fromClauseNode.fromKeyword(),
-                    fromClauseNode.typedBindingPattern(),
-                    fromClauseNode.inKeyword(),
-                    NodeFactory.createRemoteMethodCallActionNode(
-                            remoteCall.expression(),
-                            remoteCall.rightArrowToken(),
-                            NodeFactory.createSimpleNameReferenceNode(
-                                    Utils.getStringLiteralToken(Constants.EXECUTE_FUNCTION)
-                            ),
-                            remoteCall.openParenToken(),
-                            createSeparatedNodeList(firstArgument),
-                            remoteCall.closeParenToken()
-                    )
-            );
-            NodeList<IntermediateClauseNode> processedClauses = intermediateClauseNodes;
-            for (int i = 0; i < processedClauses.size(); i++) {
-                if (processedClauses.get(i) instanceof WhereClauseNode) {
-                    processedClauses = processedClauses.remove(i);
-                    break;
-                }
-            }
-            return queryPipelineNode.modify(
-                    modifiedFromClause,
-                    processedClauses
             );
 
+            ClientResourceAccessActionNode clientResourceAccessActionNode =
+                    (ClientResourceAccessActionNode) fromClauseNode.expression();
+            NamedArgumentNode whereClause = NodeFactory.createNamedArgumentNode(
+                    NodeFactory.createSimpleNameReferenceNode(
+                    Constants.TokenNodes.WHERE_CLAUSE_NAME), Constants.TokenNodes.EQUAL_TOKEN,
+                    parameterizedQueryForWhere.expression());
+            SimpleNameReferenceNode comma = NodeFactory.createSimpleNameReferenceNode(Constants.TokenNodes.COMMA_TOKEN);
+            Optional<ParenthesizedArgList> arguments = clientResourceAccessActionNode.arguments();
+            if (arguments.isPresent()) {
+                ParenthesizedArgList whereClauseArgList = NodeFactory.createParenthesizedArgList(
+                        Constants.TokenNodes.OPEN_PAREN_TOKEN,
+                        NodeFactory.createSeparatedNodeList(arguments.get().arguments().get(0), comma, whereClause),
+                        Constants.TokenNodes.CLOSE_PAREN_WITH_NEW_LINE_TOKEN
+                );
+                FromClauseNode modifiedFromClause = fromClauseNode.modify(
+                        fromClauseNode.fromKeyword(),
+                        fromClauseNode.typedBindingPattern(),
+                        fromClauseNode.inKeyword(),
+                        NodeFactory.createClientResourceAccessActionNode(
+                                clientResourceAccessActionNode.expression(),
+                                clientResourceAccessActionNode.rightArrowToken(),
+                                clientResourceAccessActionNode.slashToken(),
+                                clientResourceAccessActionNode.resourceAccessPath(),
+                                null,
+                                null,
+                                whereClauseArgList
+                        )
+                );
+                return queryPipelineNode.modify(
+                        modifiedFromClause,
+                        intermediateClauseNodes
+                );
+            }
+            return queryPipelineNode;
         }
 
         private boolean isQueryUsingPersistentClient(FromClauseNode fromClauseNode) {
-            // From clause should contain remote call invocation
+            // From clause should contain resource call invocation
             if (fromClauseNode.expression() instanceof ClientResourceAccessActionNode) {
                 ClientResourceAccessActionNode remoteCall =
                         (ClientResourceAccessActionNode) fromClauseNode.expression();
+                Collection<ChildNodeEntry> clientResourceChildEntries = remoteCall.childEntries();
+                if (clientResourceChildEntries.size() != 5) {
+                    return false;
+                }
                 if (remoteCall.expression() instanceof SimpleNameReferenceNode) {
-                    Collection<ChildNodeEntry> childEntries = remoteCall.childEntries();
-                    if (childEntries.size() == 5) {
-                        ChildNodeEntry argument = ((ChildNodeEntry) remoteCall.childEntries().toArray()[4]);
-                        Optional<Node> argumentNode = argument.node();
-                        if (argument.name().equals("arguments") && argumentNode.isPresent() &&
-                                argumentNode.get() instanceof ParenthesizedArgList) {
-                            ParenthesizedArgList parenthesizedArgList = (ParenthesizedArgList) argumentNode.get();
-                            SeparatedNodeList<FunctionArgumentNode> argum = parenthesizedArgList.arguments();
-                            PrintStream aser = System.out;
-                            for (FunctionArgumentNode pri : argum) {
-//                               argum ((NamedArgumentNode) parenthesizedArgList.arguments().get(0)).childBuckets
-//                                aser
-                                aser.println(pri.children().size());
-                            }
-                        }
+                    SimpleNameReferenceNode clientName = (SimpleNameReferenceNode) remoteCall.expression();
+                    if (!this.persistClientVariables.contains(clientName.name().text().trim())) {
+                        return false;
                     }
+                    Optional<Node> resourcePath = ((ChildNodeEntry) clientResourceChildEntries.toArray()[3]).node();
+                    return resourcePath.isPresent() && this.entities.contains(resourcePath.get().toString().trim());
                 }
             }
             return false;
@@ -194,7 +239,13 @@ public class QueryCodeModifierTask implements ModifierTask<SourceModifierContext
                     bindingPatternNode);
             ExpressionVisitor expressionVisitor = new ExpressionVisitor();
             expressionBuilder.build(expressionVisitor);
-            return expressionVisitor.getExpression();
+            List<Node> expression = expressionVisitor.getExpression();
+            LiteralValueToken where = (LiteralValueToken) expression.get(0);
+            where = where.modify(where.text().replace(Constants.WHERE, Constants.EMPTY_STRING).trim() +
+                    Constants.SPACE);
+            expression.add(0, where);
+            expression.remove(1);
+            return expression;
         }
     }
 }

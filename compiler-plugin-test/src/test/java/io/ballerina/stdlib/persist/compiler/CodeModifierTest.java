@@ -18,7 +18,11 @@
 
 package io.ballerina.stdlib.persist.compiler;
 
+import io.ballerina.projects.CodeModifierResult;
 import io.ballerina.projects.DiagnosticResult;
+import io.ballerina.projects.Document;
+import io.ballerina.projects.DocumentId;
+import io.ballerina.projects.Package;
 import io.ballerina.projects.ProjectEnvironmentBuilder;
 import io.ballerina.projects.directory.BuildProject;
 import io.ballerina.projects.environment.Environment;
@@ -33,27 +37,60 @@ import java.nio.file.Paths;
  * Code modifier related test cases.
  */
 public class CodeModifierTest {
-    private static final Path RESOURCE_DIRECTORY = Paths.get("src", "test", "resources", "codemodifier").
-            toAbsolutePath();
-
-    @Test
-    public void testResolversReturningScalarTypes() {
-        String packagePath = "project2";
-        DiagnosticResult diagnosticResult = getDiagnosticResult(packagePath);
-        Assert.assertEquals(diagnosticResult.errorCount(), 0);
-    }
-
-    private DiagnosticResult getDiagnosticResult(String path) {
-        Path projectDirPath = RESOURCE_DIRECTORY.resolve(path);
-        BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath);
-        DiagnosticResult diagnosticResult = project.currentPackage().getCompilation().diagnosticResult();
-        Assert.assertEquals(diagnosticResult.errorCount(), 0);
-        return project.currentPackage().runCodeGenAndModifyPlugins();
-    }
 
     private static ProjectEnvironmentBuilder getEnvironmentBuilder() {
-        Path distributionPath = Paths.get("../", "target", "ballerina-runtime").toAbsolutePath();
+        Path distributionPath = Paths.get("../", "target", "ballerina-runtime")
+                .toAbsolutePath();
         Environment environment = EnvironmentBuilder.getBuilder().setBallerinaHome(distributionPath).build();
         return ProjectEnvironmentBuilder.getBuilder(environment);
+    }
+
+    private Package loadPackage(String path) {
+        Path projectDirPath = Paths.get("src", "test", "resources", "codemodifier").
+                toAbsolutePath().resolve(path);
+        BuildProject project = BuildProject.load(getEnvironmentBuilder(), projectDirPath);
+        return project.currentPackage();
+    }
+
+    @Test
+    public void testCodeModifier() {
+
+        Package newPackage = getModifiedPackage("project_1");
+
+        for (DocumentId documentId : newPackage.getDefaultModule().documentIds()) {
+            Document document = newPackage.getDefaultModule().document(documentId);
+
+            if (document.name().equals("main.bal")) {
+                String sourceCode = document.syntaxTree().toSourceCode();
+                String modifiedFunction =
+                        "entities:Product[] products = check from var e in mcClient->/products(targetType = " +
+                                "entities:Product, whereClause = string ` id = ${value}  OR id = \"s\" `)\n" +
+                                "        where e.id == value || e.id == \"s\"\n" +
+                                "        select e;\n";
+                String modifiedFunction1 =
+                        "entities:Product[]|error result = from var e in mcClient->/products(targetType = " +
+                                "entities:Product, whereClause = string ` id = ${value}  AND id = \"test\" `)\n" +
+                                "            where e.id == value && e.id == \"test\"\n" +
+                                "            select e;\n";
+                String modifiedFunction2 = "products = check from var e in mcClient->/products(targetType = " +
+                        "entities:Product, whereClause = string ` ( id = ${value}  OR id = \"s\")  AND id <> " +
+                        "\"test\" `)\n" +
+                        "            where (e.id == value || e.id == \"s\") && e.id != \"test\"\n" +
+                        "            select e;\n";
+                Assert.assertTrue(sourceCode.contains(modifiedFunction));
+                Assert.assertTrue(sourceCode.contains(modifiedFunction1));
+                Assert.assertTrue(sourceCode.contains(modifiedFunction2));
+            }
+        }
+    }
+
+    private Package getModifiedPackage(String path) {
+        Package currentPackage = loadPackage(path);
+        DiagnosticResult diagnosticResult = currentPackage.getCompilation().diagnosticResult();
+        Assert.assertEquals(diagnosticResult.errorCount(), 0);
+        // Running the code generation
+        CodeModifierResult codeModifierResult = currentPackage.runCodeModifierPlugins();
+        Assert.assertEquals(codeModifierResult.reportedDiagnostics().errorCount(), 0);
+        return codeModifierResult.updatedPackage().orElse(currentPackage);
     }
 }
